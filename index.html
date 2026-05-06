@@ -3,260 +3,225 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin sistema</title>
-
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<title>Rezervacijos</title>
 
 <style>
-body { font-family: Arial; padding:15px; background:#f4f6f8 }
+body {
+    font-family: Arial;
+    padding: 10px;
+    background: #f5f5f5;
+}
+
+/* forma */
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 15px;
+}
 
 input, select, button {
-  padding:10px;
-  margin:5px;
+    padding: 8px;
+    font-size: 14px;
+}
+
+/* kalendorius */
+.month {
+    margin-bottom: 30px;
+}
+
+.month h2 {
+    margin-bottom: 10px;
 }
 
 .calendar {
-  display:grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap:5px;
-  margin-top:20px;
-  max-height:500px;
-  overflow-y:auto;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
 }
 
 .day {
-  background:white;
-  padding:6px;
-  min-height:70px;
-  border-radius:6px;
-  font-size:11px;
-  cursor:pointer;
+    background: #fff;
+    border-radius: 6px;
+    padding: 5px;
+    min-height: 60px;
+    font-size: 12px;
 }
 
-.busy { background:#ffe0e0 }
-
-h3 {
-  grid-column: span 7;
-  margin-top:20px;
+.busy {
+    background: #ffb3b3;
 }
 
+.day small {
+    display: block;
+    font-size: 11px;
+}
+
+/* lentelė */
 table {
-  width:100%;
-  background:white;
-  margin-top:20px;
-  border-collapse: collapse;
+    width: 100%;
+    background: #fff;
+    border-collapse: collapse;
+    margin-bottom: 20px;
 }
 
-td, th {
-  padding:10px;
-  border-bottom:1px solid #ddd;
+th, td {
+    padding: 8px;
+    border-bottom: 1px solid #ddd;
+    text-align: left;
 }
 
-.hidden { display:none }
-
-.login {
-  max-width:300px;
-  margin:100px auto;
-  text-align:center;
+.delete {
+    cursor: pointer;
+    background: red;
+    color: white;
+    border: none;
 }
 
 /* MOBILE */
 @media (max-width: 600px) {
-  .calendar { grid-template-columns: repeat(2, 1fr); }
-  .day { font-size:10px; min-height:60px; }
-  input, select, button { width:100%; margin:3px 0; }
-  table { font-size:12px; }
+    .calendar {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 </style>
+
 </head>
-
 <body>
-
-<!-- LOGIN -->
-<div id="loginBox" class="login">
-  <h2>Prisijungimas</h2>
-  <input type="password" id="pass" placeholder="Slaptažodis">
-  <br>
-  <button onclick="login()">Prisijungti</button>
-</div>
-
-<!-- ADMIN -->
-<div id="panel" class="hidden">
 
 <h2>Rezervacijų valdymas</h2>
 
-<select id="car">
-  <option>BMW 520</option>
-  <option>Ford Focus</option>
-  <option>Mercedes A160</option>
-</select>
+<div class="controls">
+    <select id="auto">
+        <option>BMW 520</option>
+        <option>Ford Focus</option>
+    </select>
 
-<input type="date" id="from">
-<input type="date" id="to">
-<input type="text" id="name" placeholder="Klientas">
+    <input type="date" id="from">
+    <input type="date" id="to">
+    <input type="text" id="client" placeholder="Klientas">
+    <input type="number" id="price" placeholder="€/diena">
+    <button onclick="add()">Pridėti</button>
+</div>
 
-<button onclick="addBooking()">Pridėti</button>
-
-<!-- LENTELĖ -->
 <table>
 <thead>
 <tr>
-<th>Auto</th>
-<th>Nuo</th>
-<th>Iki</th>
-<th>Klientas</th>
-<th></th>
+    <th>Auto</th>
+    <th>Nuo</th>
+    <th>Iki</th>
+    <th>Klientas</th>
+    <th>Dienos</th>
+    <th>Suma €</th>
+    <th></th>
 </tr>
 </thead>
 <tbody id="list"></tbody>
 </table>
 
-<!-- KALENDORIUS -->
-<div id="calendar" class="calendar"></div>
+<h3>Klientų suma</h3>
+<div id="clients"></div>
 
-</div>
+<div id="calendar"></div>
 
 <script>
-const PASSWORD = "1234";
+let data = JSON.parse(localStorage.getItem("rez") || "[]");
 
-function login() {
-  if (document.getElementById('pass').value === PASSWORD) {
-    document.getElementById('loginBox').style.display = 'none';
-    document.getElementById('panel').classList.remove('hidden');
-    loadBookings();
-  } else {
-    alert("Blogas slaptažodis");
-  }
+function daysBetween(a, b) {
+    return Math.ceil((new Date(b) - new Date(a)) / (1000*60*60*24)) + 1;
 }
 
-// FIREBASE
-const firebaseConfig = {
-  apiKey: "AIzaSyDc3fpqG_J3hECJOMWeGk_M_JabLGkAGaM",
-  authDomain: "nuoma-auto.firebaseapp.com",
-  projectId: "nuoma-auto",
-};
+function add() {
+    let obj = {
+        auto: auto.value,
+        from: from.value,
+        to: to.value,
+        client: client.value,
+        price: Number(price.value)
+    };
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+    data.push(obj);
+    save();
+}
 
-let bookings = [];
-let selectedDate = null;
+function del(i) {
+    data.splice(i,1);
+    save();
+}
 
-// ADD
-async function addBooking() {
-  const car = carEl.value;
-  const from = fromEl.value;
-  const to = toEl.value;
-  const name = nameEl.value;
+function save() {
+    localStorage.setItem("rez", JSON.stringify(data));
+    render();
+}
 
-  if (!from || !to || !name) return alert("Užpildyk viską");
-  if (from > to) return alert("Blogos datos");
+function render() {
+    let listHTML = "";
+    let clientsSum = {};
 
-  // ⚠️ tikrinam tik tam pačiam auto
-  for (let b of bookings) {
-    if (b.car === car && !(to < b.from || from > b.to)) {
-      return alert("Šitas auto jau užimtas!");
+    data.forEach((r,i)=>{
+        let days = daysBetween(r.from, r.to);
+        let sum = days * (r.price || 0);
+
+        clientsSum[r.client] = (clientsSum[r.client] || 0) + sum;
+
+        listHTML += `
+        <tr>
+            <td>${r.auto}</td>
+            <td>${r.from}</td>
+            <td>${r.to}</td>
+            <td>${r.client}</td>
+            <td>${days}</td>
+            <td>${sum} €</td>
+            <td><button class="delete" onclick="del(${i})">X</button></td>
+        </tr>`;
+    });
+
+    list.innerHTML = listHTML;
+
+    let clientHTML = "";
+    for(let c in clientsSum){
+        clientHTML += `<div>${c}: ${clientsSum[c]} €</div>`;
     }
-  }
+    clients.innerHTML = clientHTML;
 
-  await db.collection("bookings").add({ car, from, to, name });
-  loadBookings();
+    renderCalendar();
 }
 
-// DELETE
-async function deleteBooking(id) {
-  await db.collection("bookings").doc(id).delete();
-  loadBookings();
-}
-
-// LOAD
-async function loadBookings() {
-  const snap = await db.collection("bookings").get();
-  bookings = [];
-  list.innerHTML = "";
-
-  snap.forEach(doc => {
-    const b = doc.data();
-    b.id = doc.id;
-    bookings.push(b);
-
-    list.innerHTML += `
-      <tr>
-        <td>${b.car}</td>
-        <td>${b.from}</td>
-        <td>${b.to}</td>
-        <td>${b.name}</td>
-        <td><button onclick="deleteBooking('${doc.id}')">X</button></td>
-      </tr>
-    `;
-  });
-
-  renderCalendar();
-}
-
-// CALENDAR (VISI AUTO)
 function renderCalendar() {
-  calendar.innerHTML = "";
+    let cal = "";
 
-  const today = new Date();
-  let currentMonth = "";
+    let year = new Date().getFullYear();
 
-  for (let i = 0; i < 120; i++) {
-    const d = new Date();
-    d.setDate(today.getDate() + i);
+    for(let m=0;m<12;m++){
+        let date = new Date(year, m, 1);
+        let monthName = date.toLocaleString('lt', {month:'long'});
 
-    const dateStr = d.toISOString().split('T')[0];
+        cal += `<div class="month"><h2>${monthName} ${year}</h2><div class="calendar">`;
 
-    const month = d.toLocaleString('lt-LT', {
-      month: 'long',
-      year: 'numeric'
-    });
+        while(date.getMonth()===m){
+            let dStr = date.toISOString().split('T')[0];
 
-    if (month !== currentMonth) {
-      currentMonth = month;
-      calendar.innerHTML += `<h3>${month}</h3>`;
+            let matches = data.filter(r=>{
+                return dStr >= r.from && dStr <= r.to;
+            });
+
+            let cls = matches.length ? "day busy" : "day";
+
+            cal += `<div class="${cls}">
+                ${dStr}
+                ${matches.map(r=>`<small>${r.auto}</small>`).join("")}
+            </div>`;
+
+            date.setDate(date.getDate()+1);
+        }
+
+        cal += "</div></div>";
     }
 
-    // 🔥 visi rezervuoti auto tą dieną
-    const dayBookings = bookings.filter(b =>
-      dateStr >= b.from && dateStr <= b.to
-    );
-
-    let content = `<strong>${dateStr}</strong>`;
-
-    dayBookings.forEach(b => {
-      content += `<div style="color:red">${b.car}</div>`;
-    });
-
-    calendar.innerHTML += `
-      <div class="day ${dayBookings.length ? 'busy' : ''}"
-           onclick="selectDay('${dateStr}')">
-        ${content}
-      </div>
-    `;
-  }
+    calendar.innerHTML = cal;
 }
 
-// CLICK DAY
-function selectDay(date) {
-  if (!selectedDate) {
-    fromEl.value = date;
-    selectedDate = date;
-  } else {
-    toEl.value = date;
-    selectedDate = null;
-  }
-}
-
-// ELEMENTAI
-const carEl = document.getElementById("car");
-const fromEl = document.getElementById("from");
-const toEl = document.getElementById("to");
-const nameEl = document.getElementById("name");
-const list = document.getElementById("list");
-const calendar = document.getElementById("calendar");
-
+render();
 </script>
 
 </body>
